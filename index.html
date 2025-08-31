@@ -1,0 +1,260 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>42 Fitness</title>
+  <meta name="theme-color" content="#ffffff" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon-192.png" />
+  <style>
+    :root{ --bg:#f2f2f7; --card:#ffffff; --text:#111; --muted:#6b7280; --border:#e5e5ea; --accent:#007aff; --danger:#ff3b30; --shadow:0 8px 20px rgba(0,0,0,.06); }
+    *{box-sizing:border-box}
+    body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Inter,Arial; background:var(--bg); color:var(--text) }
+    header{ position:sticky; top:0; z-index:10; backdrop-filter:saturate(180%) blur(20px); background:rgba(255,255,255,.8); border-bottom:1px solid var(--border); padding:10px 16px; display:flex; align-items:center; justify-content:space-between }
+    .brand{ display:flex; align-items:center; gap:10px; font-weight:700 }
+    .logo{ width:32px; height:32px; border-radius:8px; background:#fff; display:grid; place-items:center; color:#111; font-weight:800; border:1px solid #ddd }
+    .container{ padding:16px; max-width:820px; margin:0 auto }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; box-shadow:var(--shadow) }
+    h3{ margin:0 0 8px 0 }
+    .row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap }
+    .btn{ border:1px solid var(--border); background:#fff; color:#111; padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer }
+    .btn.primary{ background:var(--accent); color:#fff; border-color:var(--accent) }
+    .btn:disabled{ opacity:.4; cursor:not-allowed }
+    .list{ display:grid; gap:10px }
+    .calendar-row{ display:flex; align-items:center; justify-content:space-between; padding:12px; border:1px solid var(--border); border-radius:12px; background:#fff; box-shadow:var(--shadow) }
+    .calendar-row.today{ border-color:var(--accent); box-shadow: 0 0 0 2px rgba(0,122,255,.2), var(--shadow) }
+    .badge{ font-size:12px; padding:4px 8px; border:1px solid var(--border); border-radius:999px; color:#444; background:#fafafa }
+    .badge.cancel{ color:#ff3b30; border-color:#ffd1ce; background:#fff5f5 }
+    .badge.done{ color:#34c759; border-color:#c7f0d2; background:#f4fff7 }
+    .hidden{ display:none !important }
+    .modal{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.25); z-index:100 }
+    .modal .box{ width:min(760px,94vw); max-height:90vh; overflow:auto }
+    input[type="number"]{ width:90px; padding:8px 10px; border-radius:10px; border:1px solid var(--border) }
+    .tabs{ position:fixed; bottom:0; left:0; right:0; background:rgba(255,255,255,.9); backdrop-filter:blur(16px); border-top:1px solid var(--border); display:flex; justify-content:space-around; padding:10px }
+    .tab{ background:#fff; border:1px solid var(--border); padding:8px 12px; border-radius:10px; color:#555 }
+    .tab.active{ border-color:var(--accent); color:#000 }
+    .section-title{ font-weight:700; color:#6b7280; margin:6px 4px }
+    .ex-row{ display:flex; gap:10px; align-items:flex-start }
+    .ex-row input[type="checkbox"]{ transform:scale(1.2); margin-top:4px }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><div class="logo">42</div><div>Fitness</div></div>
+    <div class="row">
+      <button class="btn primary" id="openToday">Сегодня</button>
+    </div>
+  </header>
+
+  <main id="view-calendar" class="container">
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <h3>Календарь недели</h3>
+        <div class="row">
+          <button class="btn" id="prevWeek">←</button>
+          <div class="btn" id="weekLabel">Неделя</div>
+          <button class="btn" id="nextWeek">→</button>
+        </div>
+      </div>
+      <div class="row" style="margin:6px 0"><span id="todayHeader" class="badge">Сегодня</span></div>
+      <div id="calendarList" class="list"></div>
+      <div id="emptyHint" class="badge hidden" style="margin-top:8px">Нет данных на эту неделю</div>
+    </section>
+  </main>
+
+  <main id="view-progress" class="container hidden">
+    <section class="card">
+      <h3>Прогресс ROM</h3>
+      <canvas id="romChart" width="800" height="280" style="width:100%; border:1px solid var(--border); border-radius:10px"></canvas>
+      <div class="row" style="margin-top:10px">
+        <div class="badge">Последний: <b id="lastROM">–</b>°</div>
+        <div class="badge">Цель: 140°</div>
+        <button class="btn" id="addRom">Добавить замер</button>
+      </div>
+      <div id="logList" class="list" style="margin-top:10px"></div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button class="tab active" data-view="calendar">Календарь</button>
+    <button class="tab" data-view="progress">Прогресс</button>
+  </nav>
+
+  <script>
+    const PROGRAM_DATA = [{"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Разминка", "name": "Лёгкий кардио", "dose": "10 мин", "desc": "Вело/бег/эллипс", "youtube": "Без видео", "order": 0}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Присед с паузой", "dose": "3×8", "desc": "Контролируемая глубина", "youtube": "https://www.youtube.com/shorts/WWmoHI-LKKY", "order": 1}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Bulgarian split squat", "dose": "3×10", "desc": "Выпады назад с опорой", "youtube": "https://www.youtube.com/watch?v=vgn7bSXkgkA ", "order": 2}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Leg press", "dose": "3×12", "desc": "Средняя глубина, без боли", "youtube": "https://www.youtube.com/shorts/EotSw18oR9w ", "order": 3}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Hip thrust", "dose": "3×12", "desc": "Ягодичный мост", "youtube": "https://www.youtube.com/watch?v=pUdIL5x0fWg ", "order": 4}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Планка", "dose": "3×30 сек", "desc": "На предплечьях, корпус прямой", "youtube": "https://www.youtube.com/watch?v=2NlAC0pnJOE", "order": 5}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 6}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/KkinK0SJNRg ", "order": 7}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 8}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 9}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 10}, {"w0": 1, "w1": 4, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 11}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Разминка", "name": "Беговая разминка", "dose": "8–10 мин", "desc": "Трусца + динамическая растяжка", "youtube": "Без видео", "order": 12}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Основные упражнения", "name": "Интервалы бег/шаг", "dose": "8×(60 м + 40 м)", "desc": "60 м бег, 40 м шаг", "youtube": "Без видео", "order": 13}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Основные упражнения", "name": "Челночный бег", "dose": "5×10–20 м", "desc": "Быстрые старты и остановки", "youtube": "Без видео", "order": 14}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Основные упражнения", "name": "Передачи мячом", "dose": "5–10 мин", "desc": "В стенку или с партнёром", "youtube": "Без видео", "order": 15}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 16}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/_e8THuNxI14", "order": 17}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 18}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 19}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 20}, {"w0": 1, "w1": 4, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 21}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Разминка", "name": "Лёгкий кардио", "dose": "10 мин", "desc": "Вело/бег", "youtube": "Без видео", "order": 22}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Romanian deadlift", "dose": "3×10", "desc": "Становая с прямыми ногами", "youtube": "https://www.youtube.com/watch?v=7j-2w4-P14I", "order": 23}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Step-ups", "dose": "3×10", "desc": "Подъём на тумбу 30–40 см", "youtube": "Без видео", "order": 24}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Nordic hamstring curl", "dose": "3×6", "desc": "С контролем, с поддержкой", "youtube": "https://www.youtube.com/shorts/QU0PeydWBBk", "order": 25}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Баланс на одной ноге", "dose": "3×30 сек", "desc": "Удержание равновесия", "youtube": "Без видео", "order": 26}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Боковая планка", "dose": "3×20 сек", "desc": "Корпус прямой", "youtube": "https://www.youtube.com/watch?v=gRsPnPM4Oqc", "order": 27}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 28}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/_e8THuNxI14", "order": 29}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 30}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 31}, {"w0": 1, "w1": 4, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 32}, {"w0": 1, "w1": 4, "dow": 3, "theme": "active recovery", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 33}, {"w0": 1, "w1": 4, "dow": 4, "theme": "active recovery", "section": "Разминка", "name": "Лёгкий вело/ходьба", "dose": "20–30 мин", "desc": "Активное восстановление", "youtube": "Без видео", "order": 34}, {"w0": 1, "w1": 4, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 35}, {"w0": 1, "w1": 4, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/_e8THuNxI14", "order": 36}, {"w0": 1, "w1": 4, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 37}, {"w0": 1, "w1": 4, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 38}, {"w0": 1, "w1": 4, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 39}, {"w0": 1, "w1": 4, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 40}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Разминка", "name": "Лёгкий кардио", "dose": "10 мин", "desc": "Вело/бег", "youtube": "Без видео", "order": 41}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Step-down", "dose": "3×10", "desc": "Контролируемое движение вниз", "youtube": "https://www.youtube.com/watch?v=RgTKgtV1ltk", "order": 42}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Jump squats (лёгкие)", "dose": "3×6", "desc": "Прыжки с двух ног, мягкая посадка", "youtube": "https://www.youtube.com/shorts/IfqrxS_-8oU ", "order": 43}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Hip thrust", "dose": "3×10", "desc": "Ягодичный мост с весом", "youtube": "https://www.youtube.com/watch?v=pUdIL5x0fWg", "order": 44}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Pallof press", "dose": "3×12", "desc": "Антиротация корпусом с резинкой", "youtube": "https://www.youtube.com/watch?v=tvzoG7Ua05Y ", "order": 45}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 46}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/KkinK0SJNRg ", "order": 47}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 48}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 49}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 50}, {"w0": 1, "w1": 4, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 51}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Разминка", "name": "Беговая разминка", "dose": "8–10 мин", "desc": "Трусца + динамика", "youtube": "Без видео", "order": 52}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Основные упражнения", "name": "Ускорения", "dose": "6×20 м", "desc": "С контролем техники", "youtube": "Без видео", "order": 53}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Основные упражнения", "name": "Конусы, зигзаги", "dose": "5–6 серий", "desc": "Маневрирование без жёсткой остановки", "youtube": "Без видео", "order": 54}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Основные упражнения", "name": "Удары по воротам", "dose": "10–15", "desc": "Спокойные удары", "youtube": "Без видео", "order": 55}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 56}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/_e8THuNxI14", "order": 57}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 58}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 59}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 60}, {"w0": 1, "w1": 4, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 61}, {"w0": 1, "w1": 4, "dow": 0, "theme": "active recovery", "section": "Разминка", "name": "Лёгкий вело/ходьба", "dose": "20–30 мин", "desc": "Активное восстановление", "youtube": "Без видео", "order": 62}, {"w0": 1, "w1": 4, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 63}, {"w0": 1, "w1": 4, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/_e8THuNxI14", "order": 64}, {"w0": 1, "w1": 4, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 65}, {"w0": 1, "w1": 4, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 66}, {"w0": 1, "w1": 4, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 67}, {"w0": 1, "w1": 4, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 68}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Разминка", "name": "Лёгкий кардио", "dose": "10 мин", "desc": "Вело/бег", "youtube": "Без видео", "order": 69}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Присед со штангой", "dose": "4×6", "desc": "Глубина по возможностям", "youtube": "https://www.youtube.com/shorts/QR0kcv7rc70", "order": 70}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Bulgarian split squat с весом", "dose": "3×8", "desc": "Выпады назад", "youtube": "https://www.youtube.com/watch?v=vgn7bSXkgkA ", "order": 71}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Leg press", "dose": "3×10", "desc": "Жим ногами", "youtube": "https://www.youtube.com/shorts/EotSw18oR9w ", "order": 72}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Hip thrust", "dose": "3×10", "desc": "С весом", "youtube": "https://www.youtube.com/watch?v=pUdIL5x0fWg", "order": 73}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Основные упражнения", "name": "Farmer’s carry", "dose": "3×20 м", "desc": "Ходьба с гантелями", "youtube": "https://www.youtube.com/watch?v=8OtwXwrJizk", "order": 74}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 75}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/KkinK0SJNRg ", "order": 76}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 77}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 78}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 79}, {"w0": 5, "w1": 8, "dow": 1, "theme": "Силовой день", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 80}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Разминка", "name": "Беговая разминка", "dose": "8–10 мин", "desc": "Трусца", "youtube": "Без видео", "order": 81}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Основные упражнения", "name": "Интервалы 80–100 м", "dose": "6×", "desc": "70–80% усилия", "youtube": "Без видео", "order": 82}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Основные упражнения", "name": "Ускорения 10–20–30 м", "dose": "2×", "desc": "С паузами", "youtube": "Без видео", "order": 83}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Основные упражнения", "name": "Передачи + удары", "dose": "10–15 мин", "desc": "В движении", "youtube": "Без видео", "order": 84}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 85}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/KkinK0SJNRg ", "order": 86}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 87}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 88}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 89}, {"w0": 5, "w1": 8, "dow": 2, "theme": "День с мячом", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 90}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Разминка", "name": "Лёгкий кардио", "dose": "10 мин", "desc": "Вело/бег", "youtube": "Без видео", "order": 91}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Romanian deadlift", "dose": "3×8", "desc": "Становая с прямыми ногами", "youtube": "https://www.youtube.com/watch?v=7j-2w4-P14I", "order": 92}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Step-down", "dose": "3×8", "desc": "Контролируемое движение вниз", "youtube": "https://www.youtube.com/watch?v=RgTKgtV1ltk ", "order": 93}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Прыжки на коробку", "dose": "3×8", "desc": "Низкая высота (30–40 см)", "youtube": "https://www.youtube.com/shorts/afV6u8UtRQY ", "order": 94}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Приземления на одной ноге", "dose": "3×6", "desc": "Контроль посадки", "youtube": "https://www.youtube.com/watch?v=RTvg77r91so", "order": 95}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Основные упражнения", "name": "Планка с подъёмом ноги", "dose": "3×20 сек", "desc": "На предплечьях", "youtube": "https://www.youtube.com/watch?v=tCSDhgZVVto", "order": 96}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 97}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/KkinK0SJNRg ", "order": 98}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 99}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 100}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 101}, {"w0": 5, "w1": 8, "dow": 3, "theme": "Силовой день", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 102}, {"w0": 5, "w1": 8, "dow": 4, "theme": "active recovery", "section": "Разминка", "name": "Лёгкий бег/вело", "dose": "20–30 мин", "desc": "Восстановление", "youtube": "Без видео", "order": 103}, {"w0": 5, "w1": 8, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 104}, {"w0": 5, "w1": 8, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/KkinK0SJNRg ", "order": 105}, {"w0": 5, "w1": 8, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 106}, {"w0": 5, "w1": 8, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 107}, {"w0": 5, "w1": 8, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 108}, {"w0": 5, "w1": 8, "dow": 4, "theme": "active recovery", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 109}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Разминка", "name": "Лёгкий кардио", "dose": "10 мин", "desc": "Вело/бег", "youtube": "Без видео", "order": 110}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Jump squats", "dose": "3×6–8", "desc": "С контролем", "youtube": "https://www.youtube.com/shorts/IfqrxS_-8oU", "order": 111}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Nordic curl", "dose": "3×6", "desc": "С поддержкой", "youtube": "https://www.youtube.com/shorts/OGdH1D2aZPU", "order": 112}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Step-ups с весом", "dose": "3×10", "desc": "Подъём на тумбу", "youtube": "https://www.youtube.com/shorts/Pmqbi8-y6uc ", "order": 113}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Hip thrust", "dose": "3×8", "desc": "Тяжелее", "youtube": "https://www.youtube.com/watch?v=pUdIL5x0fWg", "order": 114}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Основные упражнения", "name": "Pallof press", "dose": "3×12", "desc": "Антиротация", "youtube": "https://www.youtube.com/watch?v=tvzoG7Ua05Y ", "order": 115}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 116}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/KkinK0SJNRg ", "order": 117}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 118}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 119}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 120}, {"w0": 5, "w1": 8, "dow": 5, "theme": "Силовой день", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 121}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Разминка", "name": "Беговая разминка", "dose": "8–10 мин", "desc": "Трусца", "youtube": "Без видео", "order": 122}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Основные упражнения", "name": "Ускорения с остановками", "dose": "6–8×10–20 м", "desc": "Смена направления", "youtube": "Без видео", "order": 123}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Основные упражнения", "name": "Конусы, повороты", "dose": "5–6 серий", "desc": "Маневры", "youtube": "Без видео", "order": 124}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Основные упражнения", "name": "Удары по воротам", "dose": "10–15", "desc": "В движении", "youtube": "Без видео", "order": 125}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Основные упражнения", "name": "Мини-игра 2×2 или 3×3", "dose": "10–15 мин", "desc": "Без контакта", "youtube": "Без видео", "order": 126}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 127}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/KkinK0SJNRg ", "order": 128}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 129}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 130}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 131}, {"w0": 5, "w1": 8, "dow": 6, "theme": "День с мячом", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 132}, {"w0": 5, "w1": 8, "dow": 0, "theme": "active recovery", "section": "Разминка", "name": "Лёгкий вело/ходьба", "dose": "20–30 мин", "desc": "Активное восстановление", "youtube": "Без видео", "order": 133}, {"w0": 5, "w1": 8, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Мобилизация надколенника", "dose": "2–3 мин", "desc": "Лёгкое смещение надколенника рукой", "youtube": "Без видео", "order": 134}, {"w0": 5, "w1": 8, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Heel slides", "dose": "2×12", "desc": "Скользящее сгибание пяткой лёжа/сидя", "youtube": "https://www.youtube.com/shorts/_e8THuNxI14", "order": 135}, {"w0": 5, "w1": 8, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Hero pose", "dose": "2×20–30 сек", "desc": "Сидя на пятках (с опорой при необходимости)", "youtube": "https://www.youtube.com/shorts/QkmynBsR_PA", "order": 136}, {"w0": 5, "w1": 8, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Quad stretch", "dose": "2×20–30 сек/нога", "desc": "Стоя, стопа к ягодице", "youtube": "https://www.youtube.com/watch?v=_xU-wIiMxpI", "order": 137}, {"w0": 5, "w1": 8, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Quad set", "dose": "2×10 по 5 сек", "desc": "Изометрическое напряжение квадрицепса", "youtube": "https://www.youtube.com/watch?v=IF5eDfb8afM", "order": 138}, {"w0": 5, "w1": 8, "dow": 0, "theme": "active recovery", "section": "Сгибание", "name": "Terminal knee extension", "dose": "2×12", "desc": "Разгибание колена с резинкой", "youtube": "https://www.youtube.com/shorts/CU7Fn11YMTw", "order": 139}];
+    const PROGRAM_START_ISO = "2025-09-01";
+    const PROGRAM_END_ISO = (function(){ const d = new Date(PROGRAM_START_ISO); d.setDate(d.getDate()+60); return d.toISOString().slice(0,10); })();
+
+    const LS = { get:k=>JSON.parse(localStorage.getItem(k)||"null"), set:(k,v)=>localStorage.setItem(k, JSON.stringify(v)) };
+    const db = { logs: LS.get("logs") ?? [], done: LS.get("done") ?? [], exDone: LS.get("exDone") ?? {} }; // exDone: {iso: {id:true}}
+    function persist(){ LS.set("logs", db.logs); LS.set("done", db.done); LS.set("exDone", db.exDone); }
+
+    const DOW_LABEL = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"];
+    function TYPE_GUESS(theme){ theme = (theme||"").toLowerCase(); if(theme.includes("зал")) return "Зал"; if(theme.includes("бег")) return "Бег"; if(theme.includes("поле")) return "Поле"; return "Тренировка"; }
+    function ISO(d){ return d.toISOString().slice(0,10) }
+    function startOfWeek(date){ const d=new Date(date.getFullYear(),date.getMonth(),date.getDate()); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d; }
+    function addDays(d,n){ const c=new Date(d); c.setDate(c.getDate()+n); return c; }
+    function diffDays(a,b){ return Math.floor((a-b)/(1000*60*60*24)); }
+    function programWeekByDate(date){ const start = new Date(PROGRAM_START_ISO+"T00:00:00"); const delta = diffDays(date, start); return delta>=0 ? 1 + Math.floor(delta/7) : 1; }
+
+    // секции: Разминка → Основные → Сгибание → Заминка/Остывание → прочее
+    function secRank(s){
+      s=(s||"").toLowerCase();
+      if(s.includes("размин")) return 0;
+      if(s.includes("основ")) return 1;
+      if(s.includes("сгиб") || s.includes("rom")) return 2;
+      if(s.includes("замин") || s.includes("остыв")) return 3;
+      return 9;
+    }
+
+    function getWeekPlan(week){
+      const rows = PROGRAM_DATA.filter(r=> week>=r.w0 && week<=r.w1 );
+      const byDay = {};
+      rows.sort((a,b)=> a.order - b.order).forEach(r=>{ 
+        if(!byDay[r.dow]) byDay[r.dow] = { theme: r.theme, items: [] }; 
+        if(!byDay[r.dow].theme && r.theme) byDay[r.dow].theme = r.theme;
+        byDay[r.dow].items.push({ section:r.section||"", name:r.name, dose:r.dose||"", desc:r.desc||"", youtube:r.youtube||"", order:r.order });
+      });
+      Object.values(byDay).forEach(day=> day.items.sort((a,b)=> (secRank(a.section)-secRank(b.section)) || (a.order-b.order)));
+      return byDay;
+    }
+
+    // NAV
+    const views = { calendar:document.getElementById("view-calendar"), progress:document.getElementById("view-progress") };
+    const tabs = document.querySelectorAll(".tab");
+    function switchView(v){ Object.values(views).forEach(x=>x.classList.add("hidden")); views[v].classList.remove("hidden"); tabs.forEach(t=>t.classList.toggle("active", t.dataset.view===v)); if(v==="calendar") renderCalendar(); if(v==="progress"){ drawChart(); renderLogList(); } }
+    document.querySelectorAll(".tabs .tab").forEach(function(btn){ btn.addEventListener("click", function(){ switchView(this.dataset.view); }); });
+    document.getElementById("openToday").addEventListener("click", function(){ openDayModal(ISO(new Date())); });
+
+    // Calendar state: только 60 дней от старта
+    let weekOffset=0;
+    document.getElementById("prevWeek").addEventListener("click", function(){ weekOffset--; renderCalendar(); });
+    document.getElementById("nextWeek").addEventListener("click", function(){ weekOffset++; renderCalendar(); });
+
+    function renderCalendar(){
+      const progStart = new Date(PROGRAM_START_ISO+"T00:00:00");
+      const progEnd = new Date(PROGRAM_END_ISO+"T00:00:00");
+      const today = new Date();
+      const base = startOfWeek(today);
+      let showing = addDays(base, weekOffset*7);
+      if(addDays(showing,6) < progStart) showing = new Date(progStart);
+      if(showing > progEnd) showing = addDays(progEnd,-6);
+
+      const prevBtn = document.getElementById("prevWeek");
+      const nextBtn = document.getElementById("nextWeek");
+      const minStart = startOfWeek(progStart);
+      const maxStart = startOfWeek(addDays(progEnd,-6));
+      prevBtn.disabled = showing.getTime() <= minStart.getTime();
+      nextBtn.disabled = showing.getTime() >= maxStart.getTime();
+
+      const weekN = programWeekByDate(showing);
+      document.getElementById("weekLabel").textContent = "Неделя программы " + weekN;
+
+      const plan = getWeekPlan(weekN);
+      const list = document.getElementById("calendarList"); list.innerHTML="";
+      document.getElementById("emptyHint").classList.add("hidden");
+
+      const tPlan = getWeekPlan(programWeekByDate(today))[today.getDay()] || { theme:"" };
+      document.getElementById("todayHeader").textContent = "Сегодня: " + DOW_LABEL[today.getDay()] + " — " + TYPE_GUESS(tPlan.theme) + (tPlan.theme? " ("+tPlan.theme+")": "");
+
+      let count = 0;
+      for(let i=0;i<7;i++){ 
+        const date = addDays(showing, i);
+        if(date < progStart || date > progEnd) continue;
+        const iso = ISO(date);
+        const dow = date.getDay();
+        const dPlan = plan[dow] || { theme:"", items:[] };
+        const done = db.done.includes(iso);
+
+        const row = document.createElement("div");
+        row.className = "calendar-row" + ((iso===ISO(today)) ? " today" : "");
+        const left = '<div><div style="font-weight:700">'+DOW_LABEL[dow]+' — '+TYPE_GUESS(dPlan.theme)+'</div>' +
+                     '<div class="muted" style="color:#6b7280; font-size:13px">'+iso+' · '+(dPlan.theme||"—")+'</div></div>';
+        const right = '<div class="row">'+(done?'<span class="badge done">Выполнено</span>':'<span class="badge">Запланировано</span>')+
+                      ' <button class="btn">Открыть</button></div>';
+        row.innerHTML = left + right;
+        row.querySelector(".btn").addEventListener("click", function(){ openDayModal(iso); });
+        list.appendChild(row);
+        count++;
+      }
+      if(count===0){ document.getElementById("emptyHint").classList.remove("hidden"); }
+    }
+
+    function openDayModal(iso){
+      const d = new Date(iso+"T00:00:00");
+      const weekN = programWeekByDate(d);
+      const plan = getWeekPlan(weekN)[d.getDay()] || { theme:"", items:[] };
+      const modal = document.createElement("div"); modal.className="modal";
+      modal.innerHTML = '<div class="card box">'+
+          '<div class="row" style="justify-content:space-between">'+
+            '<h3 style="margin:0">'+iso+' — '+TYPE_GUESS(plan.theme)+'</h3>'+
+            '<button class="btn" id="closeDay">Назад</button>'+
+          '</div>'+
+          '<div class="muted" style="color:#6b7280; font-size:13px; margin-top:6px">'+(plan.theme||"")+'</div>'+
+          '<div class="list" style="margin-top:10px" id="dayList"></div>'+
+          '<div class="row" style="justify-content:space-between; margin-top:10px">'+
+            '<div class="row"><input type="number" id="romVal" placeholder="ROM °"/><button class="btn" id="saveRom">Сохранить ROM</button></div>'+
+            '<button class="btn primary" id="markDone">Отметить день выполненным</button>'+
+          '</div>'+
+        '</div>';
+      const list = modal.querySelector("#dayList");
+      const exState = (db.exDone[iso] = db.exDone[iso] || {});
+
+      let currentSection = null;
+      plan.items.forEach(function(it, idx){
+        if(it.section !== currentSection){ 
+          const h = document.createElement("div");
+          h.className = "section-title";
+          h.textContent = it.section || "Другое";
+          list.appendChild(h);
+          currentSection = it.section;
+        }
+        const exId = (it.section+'|'+it.name).toLowerCase();
+        const checked = !!exState[exId];
+
+        const row = document.createElement("div"); row.className="calendar-row"; row.style.padding="10px 12px";
+        row.innerHTML = '<div class="ex-row">'+
+            '<input type="checkbox" '+(checked?'checked':'')+' />'+
+            '<div><div style="font-weight:700">'+it.name+(it.dose? ' · '+it.dose : '')+'</div>'+
+            '<div style="color:#6b7280; font-size:13px">'+(it.desc? it.desc : '')+'</div>'+
+            (it.youtube? '<div class="row" style="margin-top:6px"><a class="btn" href="'+it.youtube+'" target="_blank" rel="noopener">Видео ▶</a></div>' : '')+
+            '</div></div>';
+        const checkbox = row.querySelector('input[type="checkbox"]');
+        checkbox.addEventListener('change', function(){
+          exState[exId] = this.checked;
+          persist();
+          updateDoneButton();
+        });
+        list.appendChild(row);
+      });
+
+      function allExercisesDone(){
+        const ids = plan.items.map(it => (it.section+'|'+it.name).toLowerCase());
+        return ids.every(id => exState[id]);
+      }
+      function updateDoneButton(){
+        const btn = modal.querySelector("#markDone");
+        btn.disabled = !allExercisesDone();
+      }
+      updateDoneButton();
+
+      modal.querySelector("#closeDay").onclick = function(){ modal.remove(); };
+      modal.querySelector("#saveRom").onclick = function(){ 
+        const v = parseInt(modal.querySelector("#romVal").value || ""); if(isNaN(v)){ alert("Укажи угол в °"); return; }
+        const idx = db.logs.findIndex(x=>x.date===iso); if(idx>=0) db.logs[idx].rom = v; else db.logs.push({date:iso, rom:v});
+        persist(); alert("ROM сохранён ✅");
+      };
+      modal.querySelector("#markDone").onclick = function(){ 
+        if(!db.done.includes(iso)) db.done.push(iso); persist(); alert("День отмечен как выполненный ✅");
+        modal.remove(); renderCalendar();
+      };
+      document.body.appendChild(modal);
+    }
+
+    // First render
+    renderCalendar();
+  </script>
+</body>
+</html>
