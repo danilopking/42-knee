@@ -38,6 +38,8 @@
     .section-title{ font-weight:700; color:#6b7280; margin:6px 4px }
     .ex-row{ display:flex; gap:10px; align-items:flex-start }
     .ex-row input[type="checkbox"]{ transform:scale(1.2); margin-top:4px }
+    .seg-nav{ display:flex; gap:8px; }
+    select{ padding:8px 10px; border-radius:10px; border:1px solid var(--border); background:#fff }
   </style>
 </head>
 <body>
@@ -88,18 +90,17 @@
     const PROGRAM_END_ISO = (function(){ const d = new Date(PROGRAM_START_ISO); d.setDate(d.getDate()+60); return d.toISOString().slice(0,10); })();
 
     const LS = { get:k=>JSON.parse(localStorage.getItem(k)||"null"), set:(k,v)=>localStorage.setItem(k, JSON.stringify(v)) };
-    const db = { logs: LS.get("logs") ?? [], done: LS.get("done") ?? [], exDone: LS.get("exDone") ?? {} }; // exDone: {iso: {id:true}}
-    function persist(){ LS.set("logs", db.logs); LS.set("done", db.done); LS.set("exDone", db.exDone); }
+    const db = { logs: LS.get("logs") ?? [], done: LS.get("done") ?? [], exDone: LS.get("exDone") ?? {}, overrides: LS.get("overrides") ?? {} };
+    function persist(){ LS.set("logs", db.logs); LS.set("done", db.done); LS.set("exDone", db.exDone); LS.set("overrides", db.overrides); }
 
     const DOW_LABEL = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"];
-    function TYPE_GUESS(theme){ theme = (theme||"").toLowerCase(); if(theme.includes("зал")) return "Зал"; if(theme.includes("бег")) return "Бег"; if(theme.includes("поле")) return "Поле"; return "Тренировка"; }
+    function TYPE_GUESS(theme){ theme = (theme||"").toLowerCase(); if(theme.includes("зал")) return "Зал"; if(theme.includes("бег")) return "Бег"; if(theme.includes("поле")||theme.includes("мяч")) return "Поле"; if(theme.includes("reco")||theme.includes("восст")||theme.includes("моб")) return "Рекавери"; return "Тренировка"; }
     function ISO(d){ return d.toISOString().slice(0,10) }
     function startOfWeek(date){ const d=new Date(date.getFullYear(),date.getMonth(),date.getDate()); const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d; }
     function addDays(d,n){ const c=new Date(d); c.setDate(c.getDate()+n); return c; }
     function diffDays(a,b){ return Math.floor((a-b)/(1000*60*60*24)); }
     function programWeekByDate(date){ const start = new Date(PROGRAM_START_ISO+"T00:00:00"); const delta = diffDays(date, start); return delta>=0 ? 1 + Math.floor(delta/7) : 1; }
 
-    // секции: Разминка → Основные → Сгибание → Заминка/Остывание → прочее
     function secRank(s){
       s=(s||"").toLowerCase();
       if(s.includes("размин")) return 0;
@@ -108,6 +109,23 @@
       if(s.includes("замин") || s.includes("остыв")) return 3;
       return 9;
     }
+
+    const TEMPLATES = (()=>{
+      const byType = {};
+      PROGRAM_DATA.forEach(r=>{
+        const type = TYPE_GUESS(r.theme);
+        byType[type] = byType[type] || { theme:r.theme, days:{} };
+        (byType[type].days[r.dow] = byType[type].days[r.dow] || []).push(r);
+      });
+      const flat = {};
+      Object.keys(byType).forEach(type=>{
+        const rows = Object.values(byType[type].days).flat().sort((a,b)=> a.order-b.order);
+        const items = rows.map(r=>({ section:r.section||"", name:r.name, dose:r.dose||"", desc:r.desc||"", youtube:r.youtube||"", order:r.order }));
+        items.sort((a,b)=> (secRank(a.section)-secRank(b.section)) || (a.order-b.order));
+        flat[type] = { theme: byType[type].theme, items };
+      });
+      return flat;
+    })();
 
     function getWeekPlan(week){
       const rows = PROGRAM_DATA.filter(r=> week>=r.w0 && week<=r.w1 );
@@ -121,14 +139,12 @@
       return byDay;
     }
 
-    // NAV
     const views = { calendar:document.getElementById("view-calendar"), progress:document.getElementById("view-progress") };
     const tabs = document.querySelectorAll(".tab");
     function switchView(v){ Object.values(views).forEach(x=>x.classList.add("hidden")); views[v].classList.remove("hidden"); tabs.forEach(t=>t.classList.toggle("active", t.dataset.view===v)); if(v==="calendar") renderCalendar(); if(v==="progress"){ drawChart(); renderLogList(); } }
     document.querySelectorAll(".tabs .tab").forEach(function(btn){ btn.addEventListener("click", function(){ switchView(this.dataset.view); }); });
     document.getElementById("openToday").addEventListener("click", function(){ openDayModal(ISO(new Date())); });
 
-    // Calendar state: только 60 дней от старта
     let weekOffset=0;
     document.getElementById("prevWeek").addEventListener("click", function(){ weekOffset--; renderCalendar(); });
     document.getElementById("nextWeek").addEventListener("click", function(){ weekOffset++; renderCalendar(); });
@@ -165,7 +181,15 @@
         if(date < progStart || date > progEnd) continue;
         const iso = ISO(date);
         const dow = date.getDay();
-        const dPlan = plan[dow] || { theme:"", items:[] };
+
+        let dPlan;
+        const ov = db.overrides[iso];
+        if(ov && TEMPLATES[ov]){
+          dPlan = TEMPLATES[ov];
+        }else{
+          dPlan = plan[dow] || { theme:"", items:[] };
+        }
+
         const done = db.done.includes(iso);
 
         const row = document.createElement("div");
@@ -182,28 +206,57 @@
       if(count===0){ document.getElementById("emptyHint").classList.remove("hidden"); }
     }
 
+    function clampToRange(iso){
+      const progStart = new Date(PROGRAM_START_ISO+'T00:00:00');
+      const progEnd = new Date(PROGRAM_END_ISO+'T00:00:00');
+      const d = new Date(iso+'T00:00:00');
+      if(d<progStart) return ISO(progStart);
+      if(d>progEnd) return ISO(progEnd);
+      return iso;
+    }
+
     function openDayModal(iso){
+      iso = clampToRange(iso);
       const d = new Date(iso+"T00:00:00");
       const weekN = programWeekByDate(d);
-      const plan = getWeekPlan(weekN)[d.getDay()] || { theme:"", items:[] };
+      const basePlan = (getWeekPlan(weekN)[d.getDay()] || { theme:"", items:[] });
+      const ovType = db.overrides[iso];
+      const plan = ovType && TEMPLATES[ovType] ? TEMPLATES[ovType] : basePlan;
+
       const modal = document.createElement("div"); modal.className="modal";
       modal.innerHTML = '<div class="card box">'+
-          '<div class="row" style="justify-content:space-between">'+
+          '<div class="row" style="justify-content:space-between; align-items:center">'+
+            '<div class="seg-nav">'+
+              '<button class="btn" id="prevDay">← День</button>'+
+              '<button class="btn" id="nextDay">День →</button>'+
+            '</div>'+
             '<h3 style="margin:0">'+iso+' — '+TYPE_GUESS(plan.theme)+'</h3>'+
             '<button class="btn" id="closeDay">Назад</button>'+
           '</div>'+
           '<div class="muted" style="color:#6b7280; font-size:13px; margin-top:6px">'+(plan.theme||"")+'</div>'+
+          '<div class="row" style="margin-top:8px; gap:8px">'+
+            '<select id="swapType">'+
+              '<option value="">— Заменить на —</option>'+
+              (TEMPLATES["Зал"]?'<option value="Зал">Силовой (Зал)</option>':'')+
+              (TEMPLATES["Бег"]?'<option value="Бег">Бег</option>':'')+
+              (TEMPLATES["Поле"]?'<option value="Поле">Поле / с мячом</option>':'')+
+              (TEMPLATES["Рекавери"]?'<option value="Рекавери">Рекавери</option>':'')+
+            '</select>'+
+            '<button class="btn" id="applySwap">Применить</button>'+
+            (ovType?'<span class="badge">Сейчас: '+ovType+'</span>':'')+
+          '</div>'+
           '<div class="list" style="margin-top:10px" id="dayList"></div>'+
           '<div class="row" style="justify-content:space-between; margin-top:10px">'+
             '<div class="row"><input type="number" id="romVal" placeholder="ROM °"/><button class="btn" id="saveRom">Сохранить ROM</button></div>'+
             '<button class="btn primary" id="markDone">Отметить день выполненным</button>'+
           '</div>'+
         '</div>';
+
       const list = modal.querySelector("#dayList");
       const exState = (db.exDone[iso] = db.exDone[iso] || {});
 
       let currentSection = null;
-      plan.items.forEach(function(it, idx){
+      plan.items.forEach(function(it){
         if(it.section !== currentSection){ 
           const h = document.createElement("div");
           h.className = "section-title";
@@ -240,6 +293,26 @@
       }
       updateDoneButton();
 
+      modal.querySelector("#prevDay").onclick = function(){
+        const prev = new Date(iso+'T00:00:00'); prev.setDate(prev.getDate()-1);
+        modal.remove(); openDayModal(ISO(prev));
+      };
+      modal.querySelector("#nextDay").onclick = function(){
+        const nxt = new Date(iso+'T00:00:00'); nxt.setDate(nxt.getDate()+1);
+        modal.remove(); openDayModal(ISO(nxt));
+      };
+
+      modal.querySelector("#applySwap").onclick = function(){
+        const val = modal.querySelector("#swapType").value;
+        if(!val){ alert("Выбери тип дня"); return; }
+        db.overrides[iso] = val; 
+        delete db.exDone[iso];
+        persist();
+        alert("День заменён на: "+val);
+        modal.remove(); openDayModal(iso);
+        renderCalendar();
+      };
+
       modal.querySelector("#closeDay").onclick = function(){ modal.remove(); };
       modal.querySelector("#saveRom").onclick = function(){ 
         const v = parseInt(modal.querySelector("#romVal").value || ""); if(isNaN(v)){ alert("Укажи угол в °"); return; }
@@ -253,8 +326,37 @@
       document.body.appendChild(modal);
     }
 
-    // First render
-    renderCalendar();
+    // Basic ROM chart & log (same as earlier versions)
+    function drawChart(){
+      const cv = document.getElementById("romChart"); const ctx = cv.getContext("2d");
+      ctx.clearRect(0,0,cv.width,cv.height);
+      const P = { left:50, right:20, top:20, bottom:40 }; const W = cv.width - P.left - P.right; const H = cv.height - P.top - P.bottom;
+      ctx.strokeStyle = "#e5e5ea"; ctx.strokeRect(P.left, P.top, W, H);
+      for(let i=0;i<=5;i++){ const y=P.top+(H/5)*i; ctx.beginPath(); ctx.moveTo(P.left,y); ctx.lineTo(P.left+W,y); ctx.strokeStyle="#f0f0f0"; ctx.stroke(); }
+      const data = [...(db.logs||[])].filter(l=>typeof l.rom==="number").sort((a,b)=>a.date.localeCompare(b.date));
+      const roms = data.map(d=>d.rom); const dates = data.map(d=>d.date);
+      document.getElementById("lastROM").textContent = roms.length ? roms[roms.length-1] : "–"; if(!data.length) return;
+      const minROM = Math.min(90, Math.min(...roms)); const maxROM = Math.max(140, Math.max(...roms));
+      const x=function(i){ return P.left + (W/((data.length-1)||1))*i; }; const y=function(v){ return P.top + H - ((v-minROM)/((maxROM-minROM)||1))*H; };
+      ctx.beginPath(); data.forEach(function(d,i){ if(i===0) ctx.moveTo(x(i),y(d.rom)); else ctx.lineTo(x(i),y(d.rom)); }); ctx.strokeStyle="#007aff"; ctx.lineWidth=2; ctx.stroke();
+      ctx.fillStyle="#34c759"; data.forEach(function(d,i){ ctx.beginPath(); ctx.arc(x(i),y(d.rom),3,0,Math.PI*2); ctx.fill(); });
+      ctx.fillStyle="#6b7280"; ctx.font="12px -apple-system"; ctx.fillText(minROM+'°', 8, y(minROM)+4); ctx.fillText(maxROM+'°', 8, y(maxROM)+4);
+      if(dates.length){ ctx.fillText(dates[0], x(0)-20, cv.height-12); ctx.fillText(dates[dates.length-1], x(dates.length-1)-36, cv.height-12); }
+      const ty = y(140); ctx.strokeStyle="#34c759"; ctx.setLineDash([6,6]); ctx.beginPath(); ctx.moveTo(P.left,ty); ctx.lineTo(P.left+W,ty); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle="#34c759"; ctx.fillText("Цель 140°", P.left+8, ty-6);
+    }
+    function renderLogList(){
+      const el = document.getElementById("logList"); el.innerHTML="";
+      const data = [...(db.logs||[])].sort((a,b)=>b.date.localeCompare(a.date));
+      data.forEach(function(row){
+        const it = document.createElement("div"); it.className="calendar-row";
+        it.innerHTML = '<div><div style="font-weight:700)">'+row.date+'</div>'+
+          '<div style="color:#6b7280; font-size:13px">ROM: '+row.rom+'°</div></div>';
+        el.appendChild(it);
+      });
+    }
+
+    function renderCalendarInit(){ renderCalendar(); }
+    renderCalendarInit();
   </script>
 </body>
 </html>

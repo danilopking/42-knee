@@ -1,5 +1,5 @@
 
-const CACHE = "42-fitness-v9";
+const CACHE = "42-fitness-v10";
 const ASSETS = ["./","./index.html","./manifest.webmanifest","./icon-192.png","./icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
